@@ -13,7 +13,6 @@ yarn-error.log
 .env.production.local
 
 # Agent / AI Configuration
-.agents/
 .gemini/
 
 # Mobile (Expo / React Native)
