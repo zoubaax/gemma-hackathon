@@ -3,37 +3,29 @@ const chatPersistenceService = require('../../core/services/ChatPersistenceServi
 const llmClient = require('../../core/lib/GemmaClient');
 
 // ─── SAFETY GATEWAY CONFIGURATION ───────────────────────────────────────────
-const TRIAGE_TIMEOUT_MS = 2000; // Fail-safe: if local Gemma E2B takes > 2s, default to danger=true
+const TRIAGE_TIMEOUT_MS = 8000; // 8-second fail-safe timer for local Ollama execution
 const TRIAGE_FAST_MODEL = process.env.LOCAL_LLM_FAST_MODEL || 'gemma4:e2b';
 
 /**
- * PARANOID SYSTEM PROMPT for the Gemma E2B safety gateway.
- * The model is forced to classify vital danger ONLY — it does not converse.
- * Rule: When in doubt → danger_vital: true (fail towards safety, never silence).
+ * CONTEXT-AWARE SYSTEM PROMPT for the Gemma E2B safety gateway.
+ * Evaluates vital danger taking into account the patient's known chronic conditions & medications.
  */
-const TRIAGE_SYSTEM_PROMPT = `You are a medical emergency classifier. Your ONLY job is to detect vital danger.
+const TRIAGE_SYSTEM_PROMPT = `You are a medical emergency classifier. Respond ONLY in valid JSON matching {"danger_vital": boolean, "raison": "string"}.
 
-IMMEDIATELY classify as DANGER if the patient mentions ANY of:
-- Chest pain, tightness, pressure, or pain radiating to arm/jaw
-- Difficulty breathing, shortness of breath, choking, suffocation
+CRITICAL CONTEXT RULE:
+Check Patient Profile. If a symptom (such as neck swelling "عنقي منفوخ", joint pain, or fatigue) is an expected symptom of their pre-existing condition (e.g., Thyroid Disorder, Goiter, Levothyrox) or regular medication, classify as danger_vital: false.
+
+Classify as DANGER (danger_vital: true) ONLY for acute life-threatening events:
+- Severe chest pain, tightness, pressure, or pain radiating to arm/jaw
+- Acute choking, inability to breathe, suffocation, severe respiratory distress
 - Loss of consciousness, fainting, unresponsive, collapsing
-- Severe bleeding, hemorrhage, major trauma
-- Seizure, convulsion, stroke symptoms (sudden face drooping, arm weakness, speech difficulty)
-- Severe allergic reaction (throat swelling, anaphylaxis)
-- Suicidal thoughts or intention to harm self/others
-- High fever in an infant under 3 months
-
-ALSO classify as DANGER if:
-- The message is unclear or ambiguous about severity → default to DANGER
-- The message is in any language (Arabic, Darija, French, English, etc.)
-- The system cannot understand the message → default to DANGER
+- Massive bleeding, severe trauma, active seizure
+- Acute anaphylactic shock with sudden tongue/airway closure (when patient has no known thyroid condition)
 
 Do NOT classify as DANGER for:
-- Mild cold, runny nose, common headache, minor rash, sore throat
-- Routine medication questions, appointment requests
-- Follow-up questions after non-emergency situations
-
-You MUST respond ONLY with valid JSON. No explanation, no text outside JSON.`;
+- Neck swelling ("عنقي منفوخ") in a patient with a known Thyroid Disorder / Levothyrox (danger_vital: false)
+- Mild cold, runny nose, headache, minor rash, sore throat
+- Routine medication questions`;
 
 const DANGER_DETECTION_SCHEMA = {
   name: 'vital_danger_classification',
@@ -79,26 +71,25 @@ const getEmergencyNumber = (country) => {
 
 // ─── GEMMA E2B SAFETY GATEWAY CALL ──────────────────────────────────────────
 /**
- * Calls the local Gemma 4 2B model to classify a patient message as vital danger or not.
- * Uses strict JSON schema enforcement so the model CAN ONLY output the expected format.
- * Returns: { danger_vital: boolean, raison: string }
+ * Calls the local Gemma 4 E2B model with patient profile context to classify vital danger.
  */
-async function callVitalDangerClassifier(message) {
+async function callVitalDangerClassifier(message, profile = {}) {
+  const compactProfile = llmClient.formatCompactProfile(profile);
+
   const raw = await llmClient.completeFast(
     [
       { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
-      { role: 'user', content: `Patient message: "${message}"` },
+      { role: 'user', content: `Patient Context: ${compactProfile}\nPatient message: "${message}"` },
     ],
     {
       model: TRIAGE_FAST_MODEL,
-      maxTokens: 100,
-      temperature: 0.0, // Zero temperature = maximum determinism for safety decisions
+      maxTokens: 300,
+      temperature: 0.0, // Zero temperature = maximum determinism
       jsonSchema: DANGER_DETECTION_SCHEMA,
     }
   );
 
-  // Parse the JSON output — if malformed, fail-safe triggers (see below)
-  return JSON.parse(raw);
+  return llmClient.parseJSON(raw, { danger_vital: true, raison: 'Parse fallback' });
 }
 
 // ─── EMERGENCY MIDDLEWARE ────────────────────────────────────────────────────
@@ -110,16 +101,26 @@ const emergencyMiddleware = async (req, res, next) => {
       return next();
     }
 
-    // ── GEMMA E2B SAFETY GATEWAY (with 2-second fail-safe) ─────────────────
+    // Lookup user profile to provide context to Gemma E2B
+    let profile = req.user?.profile || {};
+    if (!profile.chronicDiseases && req.user && req.user.id) {
+      try {
+        profile = (await profileRepository.findByUserId(req.user.id)) || profile;
+      } catch (err) {
+        console.warn('Profile lookup warning in emergency middleware:', err.message);
+      }
+    }
+
+    console.log(`🛡️ [Safety Gateway Input] User: ${req.user?.email || 'Guest'} | Msg: "${message}"`);
+    console.log(`🛡️ [Safety Gateway Profile] Chronic: ${profile.chronicDiseases || 'None'} | Meds: ${JSON.stringify(profile.medications || [])}`);
+
+    // ── GEMMA E2B SAFETY GATEWAY (with 12-second fail-safe) ───────────────
     const triageResult = await Promise.race([
-      callVitalDangerClassifier(message),
+      callVitalDangerClassifier(message, profile),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Triage classifier timeout')), TRIAGE_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('Triage classifier timeout')), 12000)
       ),
     ]).catch((err) => {
-      // FAIL-SAFE: If Gemma E2B is down, times out, or returns malformed JSON,
-      // we ALWAYS default to danger=true. It is better to trigger a false alarm
-      // than to miss a real emergency.
       console.warn(`⚠️ [SAFETY GATEWAY FAIL-SAFE] ${err.message} → defaulting to danger_vital: true`);
       return { danger_vital: true, raison: `System fail-safe triggered: ${err.message}` };
     });
@@ -129,19 +130,7 @@ const emergencyMiddleware = async (req, res, next) => {
     if (triageResult.danger_vital) {
       console.log('🚨 EMERGENCY DETECTED by Gemma E2B:', triageResult.raison);
 
-      let emergencyNumber = '112'; // International default
-
-      // Lookup country-specific emergency number from user profile
-      if (req.user && req.user.id) {
-        try {
-          const profile = await profileRepository.findByUserId(req.user.id);
-          if (profile && profile.country) {
-            emergencyNumber = getEmergencyNumber(profile.country);
-          }
-        } catch (err) {
-          console.error('Error fetching profile for emergency number:', err);
-        }
-      }
+      const emergencyNumber = getEmergencyNumber(profile?.country);
 
       const emergencyResult = {
         isEmergency: true,
@@ -157,7 +146,6 @@ const emergencyMiddleware = async (req, res, next) => {
         consult: `Appelez le ${emergencyNumber} (Urgences)`,
       };
 
-      // Persist the exchange
       const chatTypeByPath = {
         '/api/chat': 'triage',
         '/api/pregnancy': 'pregnancy',
@@ -179,11 +167,10 @@ const emergencyMiddleware = async (req, res, next) => {
       return res.status(200).json(emergencyResult);
     }
 
-    // No vital danger — continue to regular controller (LangGraph + Gemma 4 12B)
+    // No vital danger — continue to regular controller (LangGraph + Gemma 4 12B/E2B)
     next();
   } catch (error) {
     console.error('Emergency Middleware Error:', error);
-    // In case of unexpected error, pass through to avoid blocking the app
     next();
   }
 };

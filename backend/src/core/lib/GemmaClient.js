@@ -32,17 +32,22 @@ class GemmaClient {
   }
 
   /**
-   * Safely parses JSON from raw LLM output, handling markdown wrappers and thinking preambles.
+   * Safe JSON parser with auto-extraction of structured JSON objects.
    */
-  parseJSON(raw, fallback = {}) {
-    if (typeof raw !== 'string') return fallback;
+  parseJSON(input, fallback = {}) {
+    if (!input || typeof input !== 'string') return fallback;
+    const cleaned = input.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     try {
-      const clean = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```json/gi, '').replace(/```/gi, '').trim();
-      const match = clean.match(/\{[\s\S]*\}/) || clean.match(/\[[\s\S]*\]/);
-      if (match) return JSON.parse(match[0]);
-      return JSON.parse(clean);
-    } catch (e) {
-      console.warn('⚠️ [GemmaClient] JSON parse fallback used:', e.message);
+      return JSON.parse(cleaned);
+    } catch (e1) {
+      // Find JSON object starting with a known key (reply, severity, danger_vital, etc.) or standard brace
+      const jsonMatch = cleaned.match(/\{\s*"(?:reply|severity|danger_vital|status|risk|reason|raison)"[\s\S]*?\}/i) 
+                     || cleaned.match(/\{[\s\S]*?\}/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0]);
+        } catch (e2) {}
+      }
       return fallback;
     }
   }
@@ -82,10 +87,26 @@ class GemmaClient {
     }
 
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    const msg = data.choices?.[0]?.message || {};
+    let content = msg.content || msg.reasoning || '';
 
-    // Strip reasoning tags if present
+    // Strip Gemma 4 reasoning/thinking preambles & tags
     content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    if (/^\s*\*|\d+\.\s*\*\*|^Thinking Process:/i.test(content)) {
+      const lines = content.split('\n');
+      const cleanLines = lines.filter(l => {
+        const trimmed = l.trim();
+        if (/^\d+\.\s*\*\*/.test(trimmed)) return false;
+        if (/^Thinking Process:/i.test(trimmed)) return false;
+        if (/^\*\s*(?:Task|Constraint|Clinical|Sentence|Patient|Step|Reasoning|Check|Action|Greeting|Rule|CRITICAL)/i.test(trimmed)) return false;
+        if (/^(?:Analyze|Determine|Formulate|Apply|Draft|Synthesize)/i.test(trimmed)) return false;
+        return true;
+      });
+      if (cleanLines.length > 0) {
+        content = cleanLines.join('\n').trim();
+      }
+    }
 
     return content;
   }
@@ -94,7 +115,7 @@ class GemmaClient {
    * Fast completion using the small router/safety model (Gemma 4 E2B).
    */
   async completeFast(messages, options = {}) {
-    return this.complete(messages, { maxTokens: 180, ...options, model: this.fastModel });
+    return this.complete(messages, { maxTokens: 700, ...options, model: this.fastModel });
   }
 
   /**

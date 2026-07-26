@@ -7,10 +7,13 @@ const allergyAnalyzerService = require('../../services/AllergyAnalyzerService');
 async function triageNode(state) {
   const { messages, patientProfile, userMessage } = state;
   try {
-    const history = messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    }));
+    const history = [
+      ...messages.map((m) => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      })),
+      { role: 'user', content: userMessage }
+    ];
     const reply = await triageAgent.assess(history, patientProfile);
     const severity = triageAgent.getSeverity(reply);
     const timeMatch = reply.match(/\[FOLLOWUP_TIME_MINUTES:\s*(\d+)\]/);
