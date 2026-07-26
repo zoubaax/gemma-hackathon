@@ -130,8 +130,8 @@ graph TD
     Strip --> RegexJSON
     RegexJSON --> Check
     
-    Check -->|1 Agent (e.g. Triage)| Bypass
-    Check -->|> 1 Agents| Synthesis
+    Check -->|"1 Agent (e.g. Triage)"| Bypass
+    Check -->|"> 1 Agents"| Synthesis
     
     Bypass --> Final
     Synthesis --> Final
