@@ -52,14 +52,13 @@ PROACTIVE FOLLOW-UP RULES:
 2. If the patient's message is agreeing to a check-in (e.g., "yes", "نعم", "sure", "d'accord", "in 30 mins"), you MUST output exactly: [FOLLOWUP_TIME_MINUTES: <minutes>] and [FOLLOWUP_MSG: <brief message in patient's language>] at the very end of your response. If they just agree without a time, use 120.
 3. DIRECT REQUEST — CRITICAL: If the patient's message contains BOTH a health concern AND a specific follow-up time in the SAME message (e.g., "I feel bad, check on me in 10 seconds" / "لست بحالة جيدة تابعني بعد 10 ثواني" / "je ne me sens pas bien, contacte-moi dans 30 minutes"), treat this as DIRECT CONSENT. You MUST immediately output [FOLLOWUP_TIME_MINUTES: <minutes>] and [FOLLOWUP_MSG: <brief message>] without asking for confirmation first.
    Arabic patterns that mean "follow up / check on me": تابعني, تابعيني, راجعني, تفقدني, ابعث لي رسالة, ممكن تتابع
-   UNIT CONVERSION (CRITICAL): The tag value MUST always be in MINUTES. Convert all units:
-   - "10 seconds" / "10 ثانية" / "عشر ثواني" → [FOLLOWUP_TIME_MINUTES: 0.167]
-   - "30 seconds" / "30 ثانية" → [FOLLOWUP_TIME_MINUTES: 0.5]
-   - "1 minute" / "دقيقة" → [FOLLOWUP_TIME_MINUTES: 1]
-   - "10 minutes" / "10 دقائق" → [FOLLOWUP_TIME_MINUTES: 10]
-   - "30 minutes" / "30 دقيقة" → [FOLLOWUP_TIME_MINUTES: 30]
-   - "1 hour" / "ساعة" → [FOLLOWUP_TIME_MINUTES: 60]
-   - "2 hours" / "ساعتين" → [FOLLOWUP_TIME_MINUTES: 120]
+   UNIT CONVERSION & TAGS:
+   - If the user specifies SECONDS (e.g., "10 seconds", "10s", "10 ثانية", "10 ثواني"), output: [FOLLOWUP_TIME_SECONDS: 10]
+   - If the user specifies MINUTES or HOURS (e.g., "30 mins", "2 hours"), output: [FOLLOWUP_TIME_MINUTES: <minutes>]
+   - "1 hour" → [FOLLOWUP_TIME_MINUTES: 60] | "2 hours" → [FOLLOWUP_TIME_MINUTES: 120]
+
+4. DYNAMIC OPTIONS (CRITICAL): Whenever you ask the patient a question, you MUST provide 2-4 possible short answers for them to tap. Output them exactly at the end of your response like this: [OPTIONS: <Option1> | <Option2> | ...]. Examples: [OPTIONS: Yes | No] or [OPTIONS: Sharp | Dull | Throbbing]. You MUST do this for EVERY question you ask.
+5. EXPLAIN RULE: If the patient asks "why", "explain", or questions your assessment, provide a clear, concise explanation of your clinical reasoning without changing your tone.
 
 ## Critical Rules
 - If CRITICAL: tell patient to call emergency immediately + you will alert the team
@@ -93,7 +92,7 @@ class TriageAgent {
     ];
 
     let fullContent = '';
-    for await (const token of groq.completeStream(messages, { temperature: 0.7 })) {
+    for await (const token of groq.completeStream(messages, { temperature: 0.2 })) {
       fullContent += token;
       yield token;
     }
@@ -101,11 +100,26 @@ class TriageAgent {
     const match = fullContent.match(/\[SEVERITY:\s*(\w+)\]/);
     const requiresFollowup = fullContent.includes('[REQUIRES_FOLLOWUP: TRUE]');
     const msgMatch = fullContent.match(/\[FOLLOWUP_MSG:\s*(.+?)\]/);
+    const timeMatch = fullContent.match(/\[FOLLOWUP_TIME_MINUTES:\s*([\d.]+)\]/);
+    const secMatch = fullContent.match(/\[FOLLOWUP_TIME_SECONDS:\s*([\d.]+)\]/);
+    const optionsMatch = fullContent.match(/\[OPTIONS:\s*(.+?)\]/);
+    
+    let followupTimeMinutes = timeMatch ? parseFloat(timeMatch[1]) : null;
+    if (secMatch) {
+      followupTimeMinutes = parseFloat(secMatch[1]) / 60;
+    }
+
+    let options = null;
+    if (optionsMatch) {
+      options = optionsMatch[1].split('|').map(o => o.trim()).filter(Boolean);
+    }
     
     yield { 
       severity: match ? match[1] : 'LOW', 
-      requires_followup: requiresFollowup,
+      requires_followup: requiresFollowup || !!timeMatch || !!secMatch,
       followup_message: msgMatch ? msgMatch[1] : null,
+      followup_time_minutes: followupTimeMinutes,
+      options,
       fullContent 
     };
   }

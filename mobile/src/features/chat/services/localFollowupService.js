@@ -29,6 +29,12 @@ export async function scheduleCheckIn(followupMinutes, message, context = '') {
   const emergencySeconds = checkInSeconds + RESPONSE_WINDOW_MINUTES * 60;
 
   console.log(`[CheckIn] Scheduling check-in in ${checkInSeconds}s, emergency fallback in ${emergencySeconds}s.`);
+  
+  const { Alert } = require('react-native');
+  Alert.alert(
+    "Active Monitoring", 
+    `The AI Triage Agent will follow up with you in ${followupMinutes} minute(s).`
+  );
 
   // Notification A: The health check-in
   const checkInNotifId = await Notifications.scheduleNotificationAsync({

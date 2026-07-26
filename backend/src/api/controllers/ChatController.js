@@ -38,6 +38,7 @@ class ChatController {
                 emergencyNumber,
                 requires_followup: event.requires_followup,
                 followup_message: event.followup_message,
+                options: event.options,
               },
             });
             res.write(`data: ${JSON.stringify({ 
@@ -46,7 +47,8 @@ class ChatController {
               isEmergency,
               emergencyNumber,
               requires_followup: event.requires_followup,
-              followup_message: event.followup_message
+              followup_message: event.followup_message,
+              options: event.options
             })}\n\n`);
           }
         }

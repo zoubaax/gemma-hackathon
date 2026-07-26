@@ -146,8 +146,8 @@ export default function OrchestratorScreen() {
     }
   }, [messages]);
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (overrideText = null) => {
+    const text = typeof overrideText === 'string' ? overrideText.trim() : input.trim();
     if (!text || loading) return;
 
     const userMsg = { id: Date.now().toString(), role: 'user', text };
@@ -160,9 +160,9 @@ export default function OrchestratorScreen() {
 
     try {
       const response = await apiClient.post('/orchestrator/chat', { message: text });
-      const { reply, isEmergency, domain, agentsUsed, followupTimeMinutes, followupMessage } = response.data;
+      const { reply, isEmergency, domain, agentsUsed, followupTimeMinutes, followupMessage, options } = response.data;
       
-      console.log('[Orchestrator] API Response Followup Data:', { followupTimeMinutes, followupMessage });
+      console.log('[Orchestrator] API Response Followup Data:', { followupTimeMinutes, followupMessage, options });
 
       if (followupTimeMinutes && followupMessage) {
         scheduleCheckIn(followupTimeMinutes, followupMessage, text);
@@ -175,6 +175,7 @@ export default function OrchestratorScreen() {
         agentsUsed: agentsUsed || [],
         domain,
         isEmergency,
+        options,
       } : m));
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Connection error. Please try again.';
@@ -208,51 +209,69 @@ export default function OrchestratorScreen() {
             <Brain size={18} color="#ffffff" />
           </View>
         )}
-        <View style={[styles.msgBubble, isUser ? styles.msgBubbleUser : styles.msgBubbleAssistant]}>
-          {isStreaming ? (
-            <View>
-              <ThinkingDots />
-              {activeAgents.length > 0 && (
-                <View style={styles.agentStrip}>
-                  {activeAgents.map((agent) => {
-                    const meta = AGENT_META[agent] || { icon: Bot, color: '#64748b', label: agent };
-                    const Icon = meta.icon;
-                    return (
-                      <View key={agent} style={[styles.agentChip, { backgroundColor: meta.color + '20', borderColor: meta.color + '40' }]}>
-                        <Icon size={12} color={meta.color} />
-                        <Text style={[styles.agentChipText, { color: meta.color }]}>{meta.label}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          ) : (
-            <>
-              <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
-                {item.text}
-                {isStreaming && <Cursor />}
-              </Text>
-              {item.agentsUsed && item.agentsUsed.length > 0 && !isUser && (
-                <View style={styles.agentStrip}>
-                  {item.agentsUsed.map((agent) => {
-                    const meta = AGENT_META[agent] || { icon: Bot, color: '#64748b', label: agent };
-                    const Icon = meta.icon;
-                    return (
-                      <View key={agent} style={[styles.agentChip, { backgroundColor: meta.color + '20', borderColor: meta.color + '40' }]}>
-                        <Icon size={12} color={meta.color} />
-                        <Text style={[styles.agentChipText, { color: meta.color }]}>{meta.label}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-              {item.isEmergency && (
-                <TouchableOpacity style={styles.emergencyButton}>
-                  <Text style={styles.emergencyButtonText}>🚨 Emergency Detected — Call Help Now</Text>
+        <View style={styles.bubbleCol}>
+          <View style={[styles.msgBubble, isUser ? styles.msgBubbleUser : styles.msgBubbleAssistant]}>
+            {isStreaming ? (
+              <View>
+                <ThinkingDots />
+                {activeAgents.length > 0 && (
+                  <View style={styles.agentStrip}>
+                    {activeAgents.map((agent) => {
+                      const meta = AGENT_META[agent] || { icon: Bot, color: '#64748b', label: agent };
+                      const Icon = meta.icon;
+                      return (
+                        <View key={agent} style={[styles.agentChip, { backgroundColor: meta.color + '20', borderColor: meta.color + '40' }]}>
+                          <Icon size={12} color={meta.color} />
+                          <Text style={[styles.agentChipText, { color: meta.color }]}>{meta.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
+                  {item.text}
+                  {isStreaming && <Cursor />}
+                </Text>
+                {item.agentsUsed && item.agentsUsed.length > 0 && !isUser && (
+                  <View style={styles.agentStrip}>
+                    {item.agentsUsed.map((agent) => {
+                      const meta = AGENT_META[agent] || { icon: Bot, color: '#64748b', label: agent };
+                      const Icon = meta.icon;
+                      return (
+                        <View key={agent} style={[styles.agentChip, { backgroundColor: meta.color + '20', borderColor: meta.color + '40' }]}>
+                          <Icon size={12} color={meta.color} />
+                          <Text style={[styles.agentChipText, { color: meta.color }]}>{meta.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+                {item.isEmergency && (
+                  <TouchableOpacity style={styles.emergencyButton}>
+                    <Text style={styles.emergencyButtonText}>🚨 Emergency Detected — Call Help Now</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+          {item.options && !isStreaming && (
+            <View style={styles.optionsContainer}>
+              {item.options.map((opt, idx) => (
+                <TouchableOpacity 
+                  key={idx} 
+                  style={styles.optionBtn} 
+                  onPress={() => { 
+                    sendMessage(opt); 
+                    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, options: null } : m)); 
+                  }}
+                >
+                  <Text style={styles.optionBtnText}>{opt}</Text>
                 </TouchableOpacity>
-              )}
-            </>
+              ))}
+            </View>
           )}
         </View>
         {isUser && (
@@ -407,6 +426,7 @@ const styles = StyleSheet.create({
   msgRow: { flexDirection: 'row', marginBottom: 20, gap: 10 },
   msgRowUser: { justifyContent: 'flex-end' },
   msgRowAssistant: { justifyContent: 'flex-start' },
+  bubbleCol: { maxWidth: '78%' },
   assistantAvatar: {
     width: 32,
     height: 32,
@@ -431,7 +451,26 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   avatarImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  msgBubble: { maxWidth: '78%', padding: 14, borderRadius: 16 },
+  msgBubble: { padding: 14, borderRadius: 16 },
+  optionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  optionBtn: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#7c3aed',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  optionBtnText: {
+    color: '#7c3aed',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   msgBubbleUser: {
     backgroundColor: '#7c3aed',
     borderBottomRightRadius: 0,

@@ -60,6 +60,7 @@ router.post('/chat', authMiddleware, async (req, res) => {
     const isEmergency = result.finalResponse?.isEmergency || false;
     const followupTimeMinutes = result.finalResponse?.followupTimeMinutes || null;
     const followupMessage = result.finalResponse?.followupMessage || null;
+    const options = result.finalResponse?.options || null;
 
     await chatRepository.addMessage(
       userId,
@@ -80,6 +81,7 @@ router.post('/chat', authMiddleware, async (req, res) => {
       agentsUsed: result.finalResponse?.agentsUsed || [],
       followupTimeMinutes,
       followupMessage,
+      options,
     });
   } catch (error) {
     console.error('Orchestrator route error:', error);

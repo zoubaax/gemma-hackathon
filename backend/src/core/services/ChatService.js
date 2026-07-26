@@ -30,6 +30,7 @@ class ChatService {
           severity: chunk.severity, 
           requires_followup: chunk.requires_followup, 
           followup_message: chunk.followup_message,
+          options: chunk.options,
           fullContent,
         };
       }

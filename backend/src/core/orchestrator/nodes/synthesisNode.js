@@ -18,11 +18,14 @@ async function synthesisNode(state) {
 
   let followupTimeMinutes = null;
   let followupMessage = null;
+  let options = null;
   for (const [agent, data] of Object.entries(subAgentResponses)) {
     if (data && data.followup_time_minutes) {
       followupTimeMinutes = data.followup_time_minutes;
       followupMessage = data.followup_message || "I wanted to check on you. How are you feeling now?";
-      break;
+    }
+    if (data && data.options) {
+      options = data.options;
     }
   }
 
@@ -93,7 +96,9 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
 6. Do NOT include raw JSON or technical information.
 7. Be warm, professional, and culturally sensitive (use Salam/Labas as appropriate).
 8. Keep the response concise but complete.
-9. PROACTIVE FOLLOW-UP: If ANY agent's output ends with or includes a question offering a follow-up time (e.g., 'Would you like me to check on you in 2 hours?'), you MUST include that exact question at the very end of your response. Do not skip this!`;
+9. PROACTIVE FOLLOW-UP: If ANY agent's output ends with or includes a question offering a follow-up time (e.g., 'Would you like me to check on you in 2 hours?'), you MUST include that exact question at the very end of your response. Do not skip this!
+10. NO LECTURES ON COMMANDS: If the patient's message is a simple command (like "check me in 10 seconds", "yes", or "no"), DO NOT provide a medical consultation or mention their medical history. Simply confirm the action concisely.
+11. DYNAMIC OPTIONS: If any agent outputted [OPTIONS: ...] or if you ask the patient a question offering options, you MUST include [OPTIONS: Option1 | Option2 | ...] at the very end of your response. Example: [OPTIONS: Yes | No].`;
 
   try {
     const response = await getSynthesisModel().invoke([
@@ -101,7 +106,32 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
       { role: 'user', content: userMessage },
     ]);
 
-    const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    let content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    
+    const timeMatch = content.match(/\[FOLLOWUP_TIME_MINUTES:\s*([\d.]+)\]/);
+    const secMatch = content.match(/\[FOLLOWUP_TIME_SECONDS:\s*([\d.]+)\]/);
+    const msgMatch = content.match(/\[FOLLOWUP_MSG:\s*(.+?)\]/);
+    
+    if (secMatch) {
+      followupTimeMinutes = parseFloat(secMatch[1]) / 60;
+    } else if (timeMatch) {
+      followupTimeMinutes = parseFloat(timeMatch[1]);
+    }
+    if (msgMatch) {
+      followupMessage = msgMatch[1];
+    }
+    
+    const optionsMatch = content.match(/\[OPTIONS:\s*(.+?)\]/);
+    if (optionsMatch) {
+      options = optionsMatch[1].split('|').map(o => o.trim()).filter(Boolean);
+    }
+    
+    content = content
+      .replace(/\[FOLLOWUP_TIME_MINUTES:\s*[\d.]+\]/g, '')
+      .replace(/\[FOLLOWUP_TIME_SECONDS:\s*[\d.]+\]/g, '')
+      .replace(/\[FOLLOWUP_MSG:\s*.+?\]/g, '')
+      .replace(/\[OPTIONS:\s*.+?\]/g, '')
+      .trim();
 
     return {
       finalResponse: {
@@ -110,6 +140,7 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
         agentsUsed: activeAgents,
         followupTimeMinutes,
         followupMessage,
+        options,
       },
     };
   } catch (error) {
@@ -121,6 +152,7 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
         agentsUsed: activeAgents,
         followupTimeMinutes: null,
         followupMessage: null,
+        options: null,
       },
       errors: [`Synthesis failed: ${error.message}`],
     };

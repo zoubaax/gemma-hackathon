@@ -232,7 +232,7 @@ export default function TriageScreen() {
             const sev = typeof doneEvent === 'string' ? doneEvent : doneEvent.severity;
             const meta = typeof doneEvent === 'object' ? doneEvent : {};
             
-            const clean = accumulated.replace(/\[SEVERITY:\s*\w+\]/g, '').replace(/\[REQUIRES_FOLLOWUP:\s*\w+\]/g, '').replace(/\[FOLLOWUP_MSG:\s*.+?\]/g, '').trim();
+            const clean = accumulated.replace(/\[SEVERITY:\s*\w+\]/g, '').replace(/\[REQUIRES_FOLLOWUP:\s*\w+\]/g, '').replace(/\[FOLLOWUP_MSG:\s*.+?\]/g, '').replace(/\[FOLLOWUP_TIME_MINUTES:\s*[\d.]+\]/g, '').replace(/\[OPTIONS:\s*.+?\]/g, '').trim();
             setMessages(prev =>
               prev.map(m => m.id === assistantId ? { ...m, text: clean } : m)
             );
@@ -242,6 +242,14 @@ export default function TriageScreen() {
                 ...m,
                 isEmergency: true,
                 emergencyNumber: meta.emergencyNumber,
+                options: meta.options,
+              } : m));
+              setEmergencyNumber(meta.emergencyNumber || emergencyNumber);
+              setEmergencyVisible(true);
+            } else {
+              setMessages(prev => prev.map(m => m.id === assistantId ? {
+                ...m,
+                options: meta.options,
               } : m));
             }
             if (meta.requires_followup && meta.followup_message) {
@@ -263,6 +271,8 @@ export default function TriageScreen() {
               } : m)
             );
             setSeverity('CRITICAL');
+            setEmergencyNumber(emergencyData.emergencyNumber || emergencyNumber);
+            setEmergencyVisible(true);
           }
         );
       }
@@ -328,33 +338,51 @@ export default function TriageScreen() {
             <Bot size={16} color="#ffffff" />
           </View>
         )}
-        <View style={[styles.msgBubble, isUser ? styles.msgBubbleUser : styles.msgBubbleAssistant]}>
-          {isStreaming && !item.text ? (
-            <ThinkingDots />
-          ) : (
-            <>
-              <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
-                {item.text}
-                {isStreaming && <Cursor />}
-              </Text>
-              {item.imageUri && (
-                <Image 
-                  source={{ uri: item.imageUri }} 
-                  style={styles.attachedImage} 
-                />
-              )}
-              {item.isEmergency && item.emergencyNumber && (
+        <View style={styles.bubbleCol}>
+          <View style={[styles.msgBubble, isUser ? styles.msgBubbleUser : styles.msgBubbleAssistant]}>
+            {isStreaming && !item.text ? (
+              <ThinkingDots />
+            ) : (
+              <>
+                <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
+                  {item.text}
+                  {isStreaming && <Cursor />}
+                </Text>
+                {item.imageUri && (
+                  <Image 
+                    source={{ uri: item.imageUri }} 
+                    style={styles.attachedImage} 
+                  />
+                )}
+                {item.isEmergency && item.emergencyNumber && (
+                  <TouchableOpacity 
+                    style={styles.emergencyButton} 
+                    onPress={() => {
+                      setEmergencyNumber(item.emergencyNumber || emergencyNumber);
+                      setEmergencyVisible(true);
+                    }}
+                  >
+                    <Text style={styles.emergencyButtonText}>Appeler les Urgences ({item.emergencyNumber})</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+          {item.options && !isStreaming && (
+            <View style={styles.optionsContainer}>
+              {item.options.map((opt, idx) => (
                 <TouchableOpacity 
-                  style={styles.emergencyButton} 
-                  onPress={() => {
-                    setEmergencyNumber(item.emergencyNumber || emergencyNumber);
-                    setEmergencyVisible(true);
+                  key={idx} 
+                  style={styles.optionBtn} 
+                  onPress={() => { 
+                    sendMessage(opt); 
+                    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, options: null } : m)); 
                   }}
                 >
-                  <Text style={styles.emergencyButtonText}>Appeler les Urgences ({item.emergencyNumber})</Text>
+                  <Text style={styles.optionBtnText}>{opt}</Text>
                 </TouchableOpacity>
-              )}
-            </>
+              ))}
+            </View>
           )}
         </View>
         {isUser && (
@@ -639,6 +667,7 @@ const styles = StyleSheet.create({
   msgRow: { flexDirection: 'row', marginBottom: 20, gap: 10 },
   msgRowUser: { justifyContent: 'flex-end' },
   msgRowAssistant: { justifyContent: 'flex-start' },
+  bubbleCol: { maxWidth: '78%' },
   assistantAvatar: { 
     width: 32, 
     height: 32, 
@@ -668,9 +697,27 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   msgBubble: { 
-    maxWidth: '78%', 
     padding: 14, 
     borderRadius: 16,
+  },
+  optionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  optionBtn: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#004ac6',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  optionBtnText: {
+    color: '#004ac6',
+    fontSize: 14,
+    fontWeight: '600',
   },
   msgBubbleUser: { 
     backgroundColor: '#ffffff', 
