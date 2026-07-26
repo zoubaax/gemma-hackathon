@@ -1,4 +1,4 @@
-const GroqClient = require('../lib/GroqClient');
+const GemmaClient = require('../lib/GemmaClient');
 const OpenFdaClient = require('../../infra/clients/OpenFdaClient');
 
 const SYSTEM_PROMPT = `Tu es un expert médical spécialisé en pédiatrie. Ton rôle est d'analyser les symptômes et la sécurité des médicaments pour un enfant.

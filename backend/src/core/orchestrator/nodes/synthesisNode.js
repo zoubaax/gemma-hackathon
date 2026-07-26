@@ -1,117 +1,105 @@
-const { ChatGroq } = require('@langchain/groq');
+const llmClient = require('../../lib/GemmaClient');
 
-function getSynthesisModel() {
-  return new ChatGroq({
-    apiKey: process.env.GROQ_API_KEY,
-    model: 'llama-3.3-70b-versatile',
-    temperature: 0.3,
-    maxTokens: 2048,
-  });
-}
+async function synthesisNode(state = {}) {
+  const { 
+    subAgentResponses = {}, 
+    userMessage = '', 
+    patientProfile = {}, 
+    activeAgents = ['triage'], 
+    domain = 'triage' 
+  } = state || {};
 
-async function synthesisNode(state) {
-  const { subAgentResponses, userMessage, patientProfile, activeAgents, domain } = state;
+  const safeResponses = subAgentResponses || {};
+  const safeAgents = Array.isArray(activeAgents) ? activeAgents : ['triage'];
 
-  const hasEmergency = Object.values(subAgentResponses).some(
-    (r) => r.isEmergency || r.status === 'danger' || r.status === 'CRITICAL' || r.severity === 'CRITICAL'
+  const hasEmergency = Object.values(safeResponses).some(
+    (r) => r && (r.isEmergency || r.status === 'danger' || r.status === 'CRITICAL' || r.severity === 'CRITICAL')
   );
 
   let followupTimeMinutes = null;
   let followupMessage = null;
   let options = null;
-  for (const [agent, data] of Object.entries(subAgentResponses)) {
-    if (data && data.followup_time_minutes) {
-      followupTimeMinutes = data.followup_time_minutes;
-      followupMessage = data.followup_message || "I wanted to check on you. How are you feeling now?";
-    }
-    if (data && data.options) {
-      options = data.options;
+
+  // Extract followups, options, and direct reply fallbacks from sub-agents
+  let directReplyFallback = '';
+  for (const [agent, data] of Object.entries(safeResponses)) {
+    if (data) {
+      if (data.followup_time_minutes) {
+        followupTimeMinutes = data.followup_time_minutes;
+        followupMessage = data.followup_message || "I wanted to check on you. How are you feeling now?";
+      }
+      if (data.options) {
+        options = data.options;
+      }
+      if (!directReplyFallback && data.reply) {
+        directReplyFallback = data.reply;
+      }
     }
   }
 
-  const agentsSummary = Object.entries(subAgentResponses)
+  const agentsSummary = Object.entries(safeResponses)
     .filter(([_, data]) => data && !data.error)
     .map(([agent, data]) => {
-      let summary = `=== ${agent.toUpperCase()} AGENT ===\n`;
+      let summary = `=== ${agent.toUpperCase()} ===\n`;
       if (data.reply) summary += `Reply: ${data.reply}\n`;
-      if (data.severity) summary += `Severity: ${data.severity}\n`;
       if (data.status) summary += `Status: ${data.status}\n`;
       if (data.risk) summary += `Risk: ${data.risk}\n`;
       if (data.advice && Array.isArray(data.advice)) summary += `Advice: ${data.advice.join(' | ')}\n`;
       if (data.consult) summary += `Consult: ${data.consult}\n`;
-      if (data.dosage_guidance) summary += `Dosage Guidance: ${data.dosage_guidance}\n`;
-      if (data.message) summary += `Message: ${data.message}\n`;
-      if (data.when_to_act) summary += `When to act: ${data.when_to_act}\n`;
-      if (data.likely_cause) summary += `Likely cause: ${data.likely_cause}\n`;
-      if (data.allergy_risk) summary += `Allergy risk: ${data.allergy_risk}\n`;
       return summary;
     })
     .join('\n');
 
-  const errorsList = Object.entries(subAgentResponses)
+  const errorsList = Object.entries(safeResponses)
     .filter(([_, data]) => data && data.error)
     .map(([agent, data]) => `${agent}: ${data.error}`);
 
-  const patientContext = `
-- Age: ${patientProfile.age || 'Unknown'}
-- Gender: ${patientProfile.gender || 'Unknown'}
-- Chronic Conditions: ${patientProfile.chronicDiseases || 'None'}
-- Medications: ${patientProfile.medications ? (Array.isArray(patientProfile.medications) ? patientProfile.medications.map(m => m.nom || m).join(', ') : patientProfile.medications) : 'None'}
-- Allergies: ${patientProfile.drugAllergies || 'None'}
-- Pregnant: ${patientProfile.isPregnant ? 'Yes' : 'No'}
-- Language: ${patientProfile.preferredLanguage || 'Auto-detect'}`;
+  const compactContext = llmClient.formatCompactProfile(patientProfile);
 
-  const prompt = `You are the SHIFAA Synthesis Agent. Your job is to combine outputs from multiple specialized medical AI agents into one coherent, compassionate, and safe response for the patient.
+  const prompt = `You are the SHIFAA Synthesis Agent. Combine sub-agent outputs into ONE concise, compassionate response (2-3 sentences max).
 
 ## Patient Context
-${patientContext}
+${compactContext}
 
 ## Agents Activated
-${activeAgents.join(', ')}
+${safeAgents.join(', ')}
 
 ## Domain
-${domain || 'general'}
+${domain || 'triage'}
 
 ## Agent Outputs
-${agentsSummary}
+${agentsSummary || 'General health triage assessment'}
 
-${errorsList.length > 0 ? `## Errors (some agents failed - omit these from response)\n${errorsList.join('\n')}\n` : ''}
-
-## Patient's Original Message
+## Patient Message
 "${userMessage}"
 
-## Instructions
-1. Combine all agent insights into ONE natural, conversational response.
-2. CRITICAL LANGUAGE RULE: If the patient explicitly requests a specific language in their message (e.g., "Answer in Arabic"), you MUST write your entire response in that requested language. Otherwise, address the patient in the language they used. Do not mix languages.
-3. Structure the response clearly:
-   - Start with a warm greeting and acknowledgment
-   - Present the key findings/advice in simple terms
-   - If multiple agents contributed, merge their advice coherently
-   - End with next steps or when to seek help
-4. If ANY agent detected an emergency (${hasEmergency ? 'YES - emergency detected' : 'no emergency'}):
-   - Start with a clear emergency alert
-   - Tell the patient to call emergency services immediately
-   - Keep instructions simple and actionable
-5. Do NOT mention "Agent" or internal system details to the patient.
-6. Do NOT include raw JSON or technical information.
-7. Be warm, professional, and culturally sensitive (use Salam/Labas as appropriate).
-8. Keep the response concise but complete.
-9. PROACTIVE FOLLOW-UP: If ANY agent's output ends with or includes a question offering a follow-up time (e.g., 'Would you like me to check on you in 2 hours?'), you MUST include that exact question at the very end of your response. Do not skip this!
-10. NO LECTURES ON COMMANDS: If the patient's message is a simple command (like "check me in 10 seconds", "yes", or "no"), DO NOT provide a medical consultation or mention their medical history. Simply confirm the action concisely.
-11. DYNAMIC OPTIONS: If any agent outputted [OPTIONS: ...] or if you ask the patient a question offering options, you MUST include [OPTIONS: Option1 | Option2 | ...] at the very end of your response. Example: [OPTIONS: Yes | No].`;
+## Rules
+1. CRITICAL CONCISENESS RULE: Be extremely concise and direct. Keep your entire response under 2 to 3 sentences maximum. No novels, no disclaimers.
+2. Address the patient in the language they used (Arabic, French, English, Darija).
+3. If ANY agent detected an emergency (${hasEmergency ? 'YES - emergency detected' : 'no emergency'}), alert the patient immediately to call emergency services.
+4. PROACTIVE FOLLOW-UP: If any agent outputted a question offering a follow-up time, include it at the end.
+5. DYNAMIC OPTIONS: If any agent outputted [OPTIONS: ...] or if you offer options, include [OPTIONS: Option1 | Option2] at the end.`;
 
   try {
-    const response = await getSynthesisModel().invoke([
-      { role: 'system', content: prompt },
-      { role: 'user', content: userMessage },
-    ]);
+    const rawContent = await llmClient.complete(
+      [
+        { role: 'system', content: prompt },
+        { role: 'user', content: userMessage },
+      ],
+      {
+        model: process.env.LOCAL_LLM_MODEL || 'gemma4:e2b',
+        maxTokens: 300,
+        temperature: 0.2,
+      }
+    );
 
-    let content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-    
+    let content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
+
+    // Clean formatting tags
     const timeMatch = content.match(/\[FOLLOWUP_TIME_MINUTES:\s*([\d.]+)\]/);
     const secMatch = content.match(/\[FOLLOWUP_TIME_SECONDS:\s*([\d.]+)\]/);
     const msgMatch = content.match(/\[FOLLOWUP_MSG:\s*(.+?)\]/);
-    
+
     if (secMatch) {
       followupTimeMinutes = parseFloat(secMatch[1]) / 60;
     } else if (timeMatch) {
@@ -120,12 +108,12 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
     if (msgMatch) {
       followupMessage = msgMatch[1];
     }
-    
+
     const optionsMatch = content.match(/\[OPTIONS:\s*(.+?)\]/);
     if (optionsMatch) {
       options = optionsMatch[1].split('|').map(o => o.trim()).filter(Boolean);
     }
-    
+
     content = content
       .replace(/\[FOLLOWUP_TIME_MINUTES:\s*[\d.]+\]/g, '')
       .replace(/\[FOLLOWUP_TIME_SECONDS:\s*[\d.]+\]/g, '')
@@ -133,28 +121,33 @@ ${errorsList.length > 0 ? `## Errors (some agents failed - omit these from respo
       .replace(/\[OPTIONS:\s*.+?\]/g, '')
       .trim();
 
+    // If synthesis returned empty content, use direct agent reply fallback
+    if (!content) {
+      content = directReplyFallback || "Je suis là pour vous accompagner. Comment puis-je vous aider davantage ?";
+    }
+
     return {
       finalResponse: {
         text: content,
         isEmergency: hasEmergency,
-        agentsUsed: activeAgents,
+        agentsUsed: safeAgents,
         followupTimeMinutes,
         followupMessage,
         options,
       },
     };
   } catch (error) {
-    console.error('Synthesis node error:', error);
+    console.warn('⚠️ [Synthesis Node] Synthesis failed, using direct agent fallback:', error.message);
     return {
       finalResponse: {
-        text: "I'm sorry, I encountered an error while processing your request. Please try again or contact support.",
+        text: directReplyFallback || "Je suis là pour vous accompagner. Comment vous sentez-vous actuellement ?",
         isEmergency: hasEmergency,
-        agentsUsed: activeAgents,
-        followupTimeMinutes: null,
-        followupMessage: null,
-        options: null,
+        agentsUsed: safeAgents,
+        followupTimeMinutes,
+        followupMessage,
+        options,
       },
-      errors: [`Synthesis failed: ${error.message}`],
+      errors: [`Synthesis fallback used: ${error.message}`],
     };
   }
 }

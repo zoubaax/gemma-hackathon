@@ -1,4 +1,4 @@
-const groq = require('../../lib/GroqClient');
+const groq = require('../../lib/GemmaClient');
 
 const SYSTEM_PROMPT = `You are the Diagnosis Agent at SHIFAA digital hospital. You are a clinical reasoning specialist.
 

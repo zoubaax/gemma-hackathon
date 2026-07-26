@@ -14,6 +14,7 @@ import {
   Image,
   StatusBar,
   Alert,
+  Linking,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
@@ -160,22 +161,31 @@ export default function OrchestratorScreen() {
 
     try {
       const response = await apiClient.post('/orchestrator/chat', { message: text });
-      const { reply, isEmergency, domain, agentsUsed, followupTimeMinutes, followupMessage, options } = response.data;
+      const responseData = response.data || {};
+      const isEmergency = responseData.isEmergency || false;
+      const emergencyNumber = responseData.emergencyNumber || '112';
       
-      console.log('[Orchestrator] API Response Followup Data:', { followupTimeMinutes, followupMessage, options });
-
-      if (followupTimeMinutes && followupMessage) {
-        scheduleCheckIn(followupTimeMinutes, followupMessage, text);
+      let replyText = responseData.reply;
+      if (!replyText && isEmergency) {
+        const adviceStr = (responseData.advice || []).join(' ');
+        replyText = `🚨 URGENCE MÉDICALE DÉTECTÉE par l'IA Gemma 4 E2B.\n\n${adviceStr}\n\nAppelez immédiatement les secours au ${emergencyNumber}.`;
       }
 
-      setActiveAgents(agentsUsed || []);
+      console.log('[Orchestrator] API Response Followup Data:', { followupTimeMinutes: responseData.followupTimeMinutes, followupMessage: responseData.followupMessage, options: responseData.options });
+
+      if (responseData.followupTimeMinutes && responseData.followupMessage) {
+        scheduleCheckIn(responseData.followupTimeMinutes, responseData.followupMessage, text);
+      }
+
+      setActiveAgents(responseData.agentsUsed || []);
       setMessages(prev => prev.map(m => m.id === assistantId ? {
         ...m,
-        text: reply,
-        agentsUsed: agentsUsed || [],
-        domain,
+        text: replyText || "Je suis là pour vous accompagner. Comment puis-je vous aider davantage ?",
+        agentsUsed: responseData.agentsUsed || [],
+        domain: responseData.domain,
         isEmergency,
-        options,
+        emergencyNumber,
+        options: responseData.options,
       } : m));
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Connection error. Please try again.';
@@ -251,8 +261,8 @@ export default function OrchestratorScreen() {
                   </View>
                 )}
                 {item.isEmergency && (
-                  <TouchableOpacity style={styles.emergencyButton}>
-                    <Text style={styles.emergencyButtonText}>🚨 Emergency Detected — Call Help Now</Text>
+                  <TouchableOpacity style={styles.emergencyButton} onPress={() => Linking.openURL(`tel:${item.emergencyNumber || '112'}`)}>
+                    <Text style={styles.emergencyButtonText}>🚨 Emergency Detected — Call {item.emergencyNumber || '112'}</Text>
                   </TouchableOpacity>
                 )}
               </>

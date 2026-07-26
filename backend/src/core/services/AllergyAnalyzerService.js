@@ -1,4 +1,4 @@
-const GroqClient = require('../lib/GroqClient');
+const GroqClient = require('../lib/GemmaClient');
 const OpenWeatherClient = require('../../infra/clients/OpenWeatherClient');
 const OpenMeteoClient = require('../../infra/clients/OpenMeteoClient');
 

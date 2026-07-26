@@ -1,4 +1,4 @@
-const groq = require('../../lib/GroqClient');
+const groq = require('../../lib/GemmaClient');
 const skillLoader = require('../../lib/SkillLoader');
 
 const SKILLS = skillLoader.loadAll();

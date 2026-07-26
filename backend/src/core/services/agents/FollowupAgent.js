@@ -1,4 +1,4 @@
-const groq = require('../../lib/GroqClient');
+const groq = require('../../lib/GemmaClient');
 
 const SYSTEM_PROMPT = `You are the Follow-up Agent at SHIFAA digital hospital. You monitor patients after their consultation.
 

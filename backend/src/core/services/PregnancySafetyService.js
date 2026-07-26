@@ -1,4 +1,4 @@
-const groq = require('../lib/GroqClient');
+const gemma = require('../lib/GemmaClient');
 const openFda = require('../../infra/clients/OpenFdaClient');
 const openWeather = require('../../infra/clients/OpenWeatherClient');
 const openFoodFacts = require('../../infra/clients/OpenFoodFactsClient');

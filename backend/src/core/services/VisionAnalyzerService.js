@@ -1,4 +1,4 @@
-const groq = require('../lib/GroqClient');
+const groq = require('../lib/GemmaClient');
 
 class VisionAnalyzerService {
   async analyze(imageBase64, textMessage = "Que voyez-vous sur cette image concernant ma santé ?", profile = {}) {

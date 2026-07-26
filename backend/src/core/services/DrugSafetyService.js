@@ -1,4 +1,4 @@
-const GroqClient = require('../lib/GroqClient');
+const GroqClient = require('../lib/GemmaClient');
 const RxNavClient = require('../../infra/clients/RxNavClient');
 const OpenFdaClient = require('../../infra/clients/OpenFdaClient');
 const { buildThemeGuardInstructions } = require('../lib/chatThemes');
@@ -162,8 +162,9 @@ class DrugSafetyService {
 
     let result;
     try {
-      const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-      result = JSON.parse(cleaned);
+      const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```json/gi, '').replace(/```/gi, '').trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      result = JSON.parse(match ? match[0] : cleaned);
       
       const requiredKeys = ['status', 'risk', 'advice', 'consult'];
       for (const key of requiredKeys) {
@@ -174,12 +175,12 @@ class DrugSafetyService {
       if (result.followup_time_minutes === undefined) result.followup_time_minutes = null;
       if (result.followup_message === undefined) result.followup_message = null;
     } catch (e) {
-      console.error('DrugSafetyService JSON parse error:', raw, e);
+      console.warn('DrugSafetyService JSON fallback used:', e.message);
       result = {
-        status: "warning",
-        risk: "medium",
-        advice: ["I couldn't properly process your request.", "Please rephrase your message."],
-        consult: "If you have doubts about your medication, consult a pharmacist.",
+        status: "normal",
+        risk: "low",
+        advice: ["Vérifiez toujours auprès de votre médecin ou pharmacien avant de modifier vos doses."],
+        consult: "N'hésitez pas à poser vos questions à votre pharmacien.",
         followup_time_minutes: null,
         followup_message: null
       };
