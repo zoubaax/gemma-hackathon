@@ -10,7 +10,7 @@ const RESPONSE_WINDOW_MINUTES = 120; // 2 hours — if no response, emergency tr
  *   T + followupMinutes       → "How are you feeling?" (Notification A)
  *   T + followupMinutes + 2h  → Emergency fallback (Notification B) if user never responds
  */
-export async function scheduleCheckIn(followupMinutes, message, context = '') {
+export async function scheduleLocalFollowup(chatType, title, message, context = '', followupMinutes) {
   const Notifications = require('expo-notifications');
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -28,21 +28,23 @@ export async function scheduleCheckIn(followupMinutes, message, context = '') {
   const checkInSeconds = Math.max(1, Math.round(followupMinutes * 60));
   const emergencySeconds = checkInSeconds + RESPONSE_WINDOW_MINUTES * 60;
 
-  console.log(`[CheckIn] Scheduling check-in in ${checkInSeconds}s, emergency fallback in ${emergencySeconds}s.`);
+  console.log(`[CheckIn] Scheduling check-in in ${checkInSeconds}s for ${chatType}, emergency fallback in ${emergencySeconds}s.`);
+  
+  const displayTime = checkInSeconds < 60 ? `${checkInSeconds} second(s)` : `${Math.round(followupMinutes)} minute(s)`;
   
   const { Alert } = require('react-native');
   Alert.alert(
     "Active Monitoring", 
-    `The AI Triage Agent will follow up with you in ${followupMinutes} minute(s).`
+    `The AI Assistant will follow up with you in ${displayTime}.`
   );
 
   // Notification A: The health check-in
   const checkInNotifId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: '🩺 SHIFAA Health Check-In',
+      title: title || '🩺 SHIFAA Health Check-In',
       body: message || 'How are you feeling?',
       sound: true,
-      data: { type: 'follow_up', checkInId, context },
+      data: { type: 'follow_up', checkInId, context, chatType },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -57,7 +59,7 @@ export async function scheduleCheckIn(followupMinutes, message, context = '') {
       title: '🚨 SHIFAA — No Response',
       body: 'We noticed you did not respond to our check-in. Your emergency contact will be alerted.',
       sound: true,
-      data: { type: 'emergency_fallback', checkInId, context },
+      data: { type: 'emergency_fallback', checkInId, context, chatType },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -69,11 +71,15 @@ export async function scheduleCheckIn(followupMinutes, message, context = '') {
   // Persist so it survives app restarts
   await AsyncStorage.setItem(
     ACTIVE_CHECKIN_KEY,
-    JSON.stringify({ checkInId, checkInNotifId, emergencyNotifId, context, scheduledAt: Date.now() })
+    JSON.stringify({ checkInId, checkInNotifId, emergencyNotifId, context, chatType, scheduledAt: Date.now() })
   );
 
   console.log(`[CheckIn] Scheduled — id: ${checkInId}, checkIn: ${checkInNotifId}, emergency: ${emergencyNotifId}`);
   return checkInId;
+}
+
+export async function scheduleCheckIn(followupMinutes, message, context = '') {
+  return scheduleLocalFollowup('triage', '🩺 SHIFAA Health Check-In', message, context, followupMinutes);
 }
 
 /**

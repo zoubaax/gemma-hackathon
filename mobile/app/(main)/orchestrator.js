@@ -199,9 +199,10 @@ export default function OrchestratorScreen() {
     setActiveAgents([]);
   };
 
-  const renderMessage = ({ item }) => {
+  const renderMessage = ({ item, index }) => {
     const isUser = item.role === 'user';
     const isStreaming = item.id === (messages[messages.length - 1]?.id) && loading && !item.text;
+    const isLastMessage = index === messages.length - 1;
     return (
       <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAssistant]}>
         {!isUser && (
@@ -257,7 +258,7 @@ export default function OrchestratorScreen() {
               </>
             )}
           </View>
-          {item.options && !isStreaming && (
+          {item.options && isLastMessage && !isStreaming && (
             <View style={styles.optionsContainer}>
               {item.options.map((opt, idx) => (
                 <TouchableOpacity 

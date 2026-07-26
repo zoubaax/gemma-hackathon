@@ -328,9 +328,10 @@ export default function TriageScreen() {
       }
     : null;
 
-  const renderMessage = ({ item }) => {
+  const renderMessage = ({ item, index }) => {
     const isUser = item.role === 'user';
     const isStreaming = item.id === streamId;
+    const isLastMessage = index === messages.length - 1;
     return (
       <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAssistant]}>
         {!isUser && (
@@ -354,7 +355,7 @@ export default function TriageScreen() {
                     style={styles.attachedImage} 
                   />
                 )}
-                {item.isEmergency && item.emergencyNumber && (
+                {item.isEmergency && (
                   <TouchableOpacity 
                     style={styles.emergencyButton} 
                     onPress={() => {
@@ -368,7 +369,7 @@ export default function TriageScreen() {
               </>
             )}
           </View>
-          {item.options && !isStreaming && (
+          {item.options && isLastMessage && !isStreaming && (
             <View style={styles.optionsContainer}>
               {item.options.map((opt, idx) => (
                 <TouchableOpacity 
