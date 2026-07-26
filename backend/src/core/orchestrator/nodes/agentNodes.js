@@ -16,8 +16,13 @@ async function triageNode(state) {
     ];
     const reply = await triageAgent.assess(history, patientProfile);
     const severity = triageAgent.getSeverity(reply);
-    const timeMatch = reply.match(/\[FOLLOWUP_TIME_MINUTES:\s*(\d+)\]/);
+    const timeMatch = reply.match(/\[FOLLOWUP_TIME_MINUTES:\s*([\d.]+)\]/);
+    const secMatch = reply.match(/\[FOLLOWUP_TIME_SECONDS:\s*([\d.]+)\]/);
     const msgMatch = reply.match(/\[FOLLOWUP_MSG:\s*(.+?)\]/);
+
+    const followupTimeMinutes = secMatch 
+      ? parseFloat(secMatch[1]) / 60 
+      : (timeMatch ? parseFloat(timeMatch[1]) : null);
 
     return {
       subAgentResponses: {
@@ -25,7 +30,7 @@ async function triageNode(state) {
           reply,
           severity,
           isEmergency: severity === 'CRITICAL',
-          followup_time_minutes: timeMatch ? parseInt(timeMatch[1], 10) : null,
+          followup_time_minutes: followupTimeMinutes,
           followup_message: msgMatch ? msgMatch[1] : null,
         },
       },
