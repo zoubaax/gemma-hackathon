@@ -16,6 +16,7 @@ import {
   Animated,
   Linking,
   Switch,
+  StatusBar,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -23,7 +24,7 @@ import { useAuth } from '../../src/features/auth/context/AuthContext';
 import profileService from '../../src/features/auth/services/profileService';
 import {
   User, MapPin, Droplets, Activity, ChevronLeft, ChevronRight, Save,
-  ChevronDown, X, Heart,
+  ChevronDown, X, Heart, ShieldAlert, Shield, Plus, Trash2, Info, Globe
 } from 'lucide-react-native';
 
 const TOTAL_STEPS = 4;
@@ -55,7 +56,7 @@ const PickerModal = ({ visible, options, selected, onSelect, onClose, title }) =
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{title}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <X size={20} color="#94A3B8" />
+            <X size={20} color="#7b7485" />
           </TouchableOpacity>
         </View>
         <FlatList
@@ -72,8 +73,8 @@ const PickerModal = ({ visible, options, selected, onSelect, onClose, title }) =
                 {item}
               </Text>
               {selected === item && (
-                <View style={styles.checkCircle}>
-                  <Text style={styles.checkMark}>✓</Text>
+                <View style={styles.modalCheckCircle}>
+                  <Text style={styles.modalCheckMark}>✓</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -94,49 +95,75 @@ const StepIndicator = ({ currentStep }) => {
 
   return (
     <View style={styles.stepsContainer}>
-      {steps.map((step, index) => (
-        <View key={step.num} style={styles.stepWrapper}>
-          <View style={[styles.stepCircle, currentStep >= step.num && styles.stepCircleActive]}>
-            <Text style={[styles.stepCircleText, currentStep >= step.num && styles.stepCircleTextActive]}>
-              {currentStep > step.num ? '✓' : step.num}
+      <View style={styles.progressLineBg} />
+      <View 
+        style={[
+          styles.progressLineActive, 
+          { width: `${((currentStep - 1) / (TOTAL_STEPS - 1)) * 100}%` }
+        ]} 
+      />
+      {steps.map((step, index) => {
+        const isActive = currentStep === step.num;
+        const isCompleted = currentStep > step.num;
+        return (
+          <View key={step.num} style={styles.stepWrapper}>
+            <View style={[
+              styles.stepCircle, 
+              isActive && styles.stepCircleActive,
+              isCompleted && styles.stepCircleCompleted
+            ]}>
+              {isCompleted ? (
+                <Text style={styles.stepCircleCompletedText}>✓</Text>
+              ) : (
+                <Text style={[styles.stepCircleText, isActive && styles.stepCircleTextActive]}>
+                  {step.num}
+                </Text>
+              )}
+            </View>
+            <Text style={[
+              styles.stepLabel, 
+              isActive && styles.stepLabelActive,
+              isCompleted && styles.stepLabelCompleted
+            ]}>
+              {step.label}
             </Text>
           </View>
-          <Text style={[styles.stepLabel, currentStep >= step.num && styles.stepLabelActive]}>
-            {step.label}
-          </Text>
-          {index < steps.length - 1 && (
-            <View style={[styles.stepConnector, currentStep > step.num && styles.stepConnectorActive]} />
-          )}
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 };
 
-const InputField = ({ label, value, onChangeText, placeholder, keyboardType }) => (
+const InputField = ({ label, value, onChangeText, placeholder, keyboardType, onFocus, onBlur, isFocused }) => (
   <View style={styles.fieldGroup}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.inputRow}>
+    <Text style={[styles.fieldLabel, isFocused && styles.fieldLabelFocused]}>{label}</Text>
+    <View style={[styles.inputRow, isFocused && styles.inputRowFocused]}>
       <TextInput
         style={styles.fieldInput}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
+        placeholderTextColor="#7b7485"
         keyboardType={keyboardType}
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
     </View>
   </View>
 );
 
-const PickerField = ({ label, value, onPress, placeholder }) => (
+const PickerField = ({ label, value, onPress, placeholder, isFocused }) => (
   <View style={styles.fieldGroup}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <TouchableOpacity style={styles.pickerButton} onPress={onPress} activeOpacity={0.7}>
+    <Text style={[styles.fieldLabel, isFocused && styles.fieldLabelFocused]}>{label}</Text>
+    <TouchableOpacity 
+      style={[styles.pickerButton, isFocused && styles.pickerButtonFocused]} 
+      onPress={onPress} 
+      activeOpacity={0.7}
+    >
       <Text style={[styles.pickerText, !value && styles.pickerPlaceholder]}>
         {value || placeholder}
       </Text>
-      <ChevronDown size={16} color="#94A3B8" />
+      <ChevronDown size={16} color="#7b7485" />
     </TouchableOpacity>
   </View>
 );
@@ -147,10 +174,10 @@ const SmallPicker = ({ value, onPress, placeholder, flex }) => (
     onPress={onPress}
     activeOpacity={0.7}
   >
-    <Text style={[styles.smallPickerText, !value && { color: '#94A3B8' }]} numberOfLines={1}>
+    <Text style={[styles.smallPickerText, !value && { color: '#7b7485' }]} numberOfLines={1}>
       {value || placeholder}
     </Text>
-    <ChevronDown size={12} color="#94A3B8" />
+    <ChevronDown size={12} color="#7b7485" />
   </TouchableOpacity>
 );
 
@@ -158,18 +185,21 @@ const MultiSelectField = ({ label, value, options, field, onMultiSelect }) => (
   <View style={styles.fieldGroup}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <View style={styles.chipRow}>
-      {options.map(opt => (
-        <TouchableOpacity
-          key={opt}
-          style={[styles.chip, value.includes(opt) && styles.chipActive]}
-          onPress={() => onMultiSelect(field, opt)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.chipText, value.includes(opt) && styles.chipTextActive]}>
-            {opt}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {options.map(opt => {
+        const isSelected = value.includes(opt);
+        return (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.chip, isSelected && styles.chipActive]}
+            onPress={() => onMultiSelect(field, opt)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   </View>
 );
@@ -183,6 +213,7 @@ export default function CompleteProfileScreen() {
   const [constants, setConstants] = useState(null);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
+  const [focusedField, setFocusedField] = useState(null);
   const fadeAnim = useState(new Animated.Value(1))[0];
 
   const [formData, setFormData] = useState({
@@ -524,8 +555,8 @@ export default function CompleteProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8ff' }}>
+        <ActivityIndicator size="large" color="#420093" />
       </SafeAreaView>
     );
   }
@@ -547,29 +578,31 @@ export default function CompleteProfileScreen() {
               <View style={styles.stepIconBox}>
                 <User size={24} color="#FFFFFF" />
               </View>
-              <Text style={styles.stepIntroTitle}>Personal Identity</Text>
-              <Text style={styles.stepIntroSub}>Your basic contact and location information</Text>
+              <Text style={styles.stepIntroTitle}>Welcome to Shifaa</Text>
+              <Text style={styles.stepIntroSub}>Let's start with the basics to personalize your health dashboard.</Text>
             </View>
 
             <View style={styles.sectionCard}>
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Phone Number</Text>
-                <View style={styles.phoneRow}>
+                <Text style={[styles.fieldLabel, focusedField === 'phone' && styles.fieldLabelFocused]}>Phone Number</Text>
+                <View style={[styles.phoneRow, focusedField === 'phone' && styles.inputRowFocused]}>
                   <TouchableOpacity
                     style={styles.codePicker}
                     onPress={() => setShowCountryCodePicker(true)}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.codePickerText}>{formData.countryCode}</Text>
-                    <ChevronDown size={14} color="#94A3B8" />
+                    <ChevronDown size={14} color="#7b7485" />
                   </TouchableOpacity>
                   <TextInput
                     style={styles.phoneInput}
                     value={formData.phoneNumber}
                     onChangeText={v => setFormData(p => ({ ...p, phoneNumber: v }))}
                     placeholder="600-000000"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#7b7485"
                     keyboardType="phone-pad"
+                    onFocus={() => setFocusedField('phone')}
+                    onBlur={() => setFocusedField(null)}
                   />
                 </View>
               </View>
@@ -583,23 +616,43 @@ export default function CompleteProfileScreen() {
                 </View>
               </View>
 
-              <PickerField label="Gender" value={formData.gender} onPress={() => setShowGenderPicker(true)} placeholder="Select gender" />
+              <PickerField 
+                label="Gender" 
+                value={formData.gender} 
+                onPress={() => setShowGenderPicker(true)} 
+                placeholder="Select gender" 
+                isFocused={showGenderPicker} 
+              />
               {formData.gender === 'Female' && (
-                <View style={[styles.fieldGroup, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingVertical: 5 }]}>
-                  <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>Are you currently pregnant?</Text>
+                <View style={styles.pregnancyRow}>
+                  <Text style={styles.pregnancyLabel}>Are you currently pregnant?</Text>
                   <Switch
                     value={formData.isPregnant}
                     onValueChange={(value) => setFormData(p => ({ ...p, isPregnant: value }))}
-                    trackColor={{ false: '#E2E8F0', true: '#8B5CF6' }}
+                    trackColor={{ false: '#eeecf8', true: '#712ae2' }}
                     thumbColor={'#FFFFFF'}
                   />
                 </View>
               )}
               <PickerField label="Country" value={formData.country} onPress={() => {}} />
               {formData.country === 'Morocco' ? (
-                <PickerField label="City" value={formData.city} onPress={() => setShowCityPicker(true)} placeholder="Select city" />
+                <PickerField 
+                  label="City" 
+                  value={formData.city} 
+                  onPress={() => setShowCityPicker(true)} 
+                  placeholder="Select city" 
+                  isFocused={showCityPicker} 
+                />
               ) : (
-                <InputField label="City" value={formData.city} onChangeText={v => setFormData(p => ({ ...p, city: v }))} placeholder="City name" />
+                <InputField 
+                  label="City" 
+                  value={formData.city} 
+                  onChangeText={v => setFormData(p => ({ ...p, city: v }))} 
+                  placeholder="City name" 
+                  isFocused={focusedField === 'city'} 
+                  onFocus={() => setFocusedField('city')} 
+                  onBlur={() => setFocusedField(null)} 
+                />
               )}
             </View>
           </View>
@@ -609,27 +662,63 @@ export default function CompleteProfileScreen() {
         return (
           <View>
             <View style={styles.stepIntro}>
-              <View style={[styles.stepIconBox, { backgroundColor: '#EF4444' }]}>
+              <View style={[styles.stepIconBox, { backgroundColor: '#712ae2' }]}>
                 <Heart size={24} color="#FFFFFF" />
               </View>
-              <Text style={styles.stepIntroTitle}>Health Profile</Text>
-              <Text style={styles.stepIntroSub}>Your physical vitals and lifestyle information</Text>
+              <Text style={styles.stepIntroTitle}>Vitals & Biology</Text>
+              <Text style={styles.stepIntroSub}>This data helps our AI provide accurate triage and medical insights.</Text>
             </View>
 
             <View style={styles.sectionCard}>
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
-                  <InputField label="Weight (kg)" value={formData.weight} onChangeText={v => setFormData(p => ({ ...p, weight: v }))} placeholder="70" keyboardType="numeric" />
+                  <InputField 
+                    label="Weight (kg)" 
+                    value={formData.weight} 
+                    onChangeText={v => setFormData(p => ({ ...p, weight: v }))} 
+                    placeholder="70" 
+                    keyboardType="numeric" 
+                    isFocused={focusedField === 'weight'} 
+                    onFocus={() => setFocusedField('weight')} 
+                    onBlur={() => setFocusedField(null)} 
+                  />
                 </View>
                 <View style={{ width: 12 }} />
                 <View style={{ flex: 1 }}>
-                  <InputField label="Height (cm)" value={formData.height} onChangeText={v => setFormData(p => ({ ...p, height: v }))} placeholder="175" keyboardType="numeric" />
+                  <InputField 
+                    label="Height (cm)" 
+                    value={formData.height} 
+                    onChangeText={v => setFormData(p => ({ ...p, height: v }))} 
+                    placeholder="175" 
+                    keyboardType="numeric" 
+                    isFocused={focusedField === 'height'} 
+                    onFocus={() => setFocusedField('height')} 
+                    onBlur={() => setFocusedField(null)} 
+                  />
                 </View>
               </View>
 
-              <PickerField label="Blood Type" value={formData.bloodType} onPress={() => setShowBloodTypePicker(true)} placeholder="Select blood type" />
-              <PickerField label="Smoking Status" value={formData.smokingStatus} onPress={() => setShowSmokingPicker(true)} placeholder="Select" />
-              <PickerField label="Insurance Type" value={formData.insuranceType} onPress={() => setShowInsurancePicker(true)} placeholder="Select insurance" />
+              <PickerField 
+                label="Blood Type" 
+                value={formData.bloodType} 
+                onPress={() => setShowBloodTypePicker(true)} 
+                placeholder="Select blood type" 
+                isFocused={showBloodTypePicker} 
+              />
+              <PickerField 
+                label="Smoking Status" 
+                value={formData.smokingStatus} 
+                onPress={() => setShowSmokingPicker(true)} 
+                placeholder="Select smoking status" 
+                isFocused={showSmokingPicker} 
+              />
+              <PickerField 
+                label="Insurance Type" 
+                value={formData.insuranceType} 
+                onPress={() => setShowInsurancePicker(true)} 
+                placeholder="Select insurance" 
+                isFocused={showInsurancePicker} 
+              />
             </View>
           </View>
         );
@@ -638,11 +727,11 @@ export default function CompleteProfileScreen() {
         return (
           <View>
             <View style={styles.stepIntro}>
-              <View style={[styles.stepIconBox, { backgroundColor: '#8B5CF6' }]}>
+              <View style={[styles.stepIconBox, { backgroundColor: '#420093' }]}>
                 <Droplets size={24} color="#FFFFFF" />
               </View>
-              <Text style={styles.stepIntroTitle}>Medical Profile</Text>
-              <Text style={styles.stepIntroSub}>Allergies, conditions and medications</Text>
+              <Text style={styles.stepIntroTitle}>Medical History</Text>
+              <Text style={styles.stepIntroSub}>Identify existing conditions to ensure safe emergency response.</Text>
             </View>
 
             <View style={styles.sectionCard}>
@@ -655,19 +744,21 @@ export default function CompleteProfileScreen() {
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Medications</Text>
-                <View style={styles.inputRow}>
+                <View style={[styles.inputRow, focusedField === 'medication' && styles.inputRowFocused]}>
                   <TextInput
                     style={styles.fieldInput}
                     value={medicationSearch}
                     onChangeText={setMedicationSearch}
                     placeholder="Search medication..."
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#7b7485"
+                    onFocus={() => setFocusedField('medication')}
+                    onBlur={() => setFocusedField(null)}
                   />
-                  {searchingMed && <ActivityIndicator size="small" color="#2563EB" style={{ marginRight: 8 }} />}
+                  {searchingMed && <ActivityIndicator size="small" color="#420093" style={{ marginRight: 8 }} />}
                 </View>
                 {medicationResults.map(med => (
                   <TouchableOpacity key={med.id} style={styles.searchResult} onPress={() => addMedication(med)} activeOpacity={0.7}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.searchResultText}>{med.nom}</Text>
                       <Text style={styles.searchResultSub}>{med.forme} - {med.dosage1}</Text>
                     </View>
@@ -676,7 +767,7 @@ export default function CompleteProfileScreen() {
                 ))}
                 {formData.medications.map(med => (
                   <View key={med.id} style={styles.medItem}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.medName}>{med.nom}</Text>
                       <Text style={styles.medDosage}>{med.dosage1}</Text>
                     </View>
@@ -689,6 +780,14 @@ export default function CompleteProfileScreen() {
                   <Text style={styles.emptyHint}>No medications added yet.</Text>
                 )}
               </View>
+
+              {/* Encryption Notice */}
+              <View style={styles.encryptionCard}>
+                <Shield size={18} color="#005438" />
+                <Text style={styles.encryptionText}>
+                  Your medical data is encrypted with AES-256 and only shared with emergency responders during an active SOS event.
+                </Text>
+              </View>
             </View>
           </View>
         );
@@ -697,25 +796,24 @@ export default function CompleteProfileScreen() {
         return (
           <View>
             <View style={styles.stepIntro}>
-              <View style={[styles.stepIconBox, { backgroundColor: '#F59E0B' }]}>
+              <View style={[styles.stepIconBox, { backgroundColor: '#005438' }]}>
                 <MapPin size={24} color="#FFFFFF" />
               </View>
-              <Text style={styles.stepIntroTitle}>Emergency & Logistics</Text>
-              <Text style={styles.stepIntroSub}>Your hospital preference and emergency contacts</Text>
+              <Text style={styles.stepIntroTitle}>Safety Shield</Text>
+              <Text style={styles.stepIntroSub}>Configure your immediate circle and smart safety features.</Text>
             </View>
 
             <View style={styles.sectionCard}>
               {/* Location Card */}
               <View style={[styles.locationCard, formData.latitude && styles.locationCardActive]}>
                 <View style={styles.locationHeader}>
-                  <MapPin size={20} color={formData.latitude ? '#2563EB' : '#94A3B8'} />
-                  <Text style={[styles.locationTitle, formData.latitude && { color: '#2563EB' }]}>
+                  <MapPin size={20} color={formData.latitude ? '#420093' : '#7b7485'} />
+                  <Text style={[styles.locationTitle, formData.latitude && { color: '#420093' }]}>
                     {formData.latitude ? 'Location Saved' : 'Your Location'}
                   </Text>
                 </View>
                 {formData.latitude ? (
                   <View style={styles.locationDetails}>
-                    <MapPin size={16} color="#2563EB" />
                     <Text style={styles.locationName}>{locationName}</Text>
                     <TouchableOpacity onPress={handleGPS} style={styles.relocateBtn}>
                       <Text style={styles.relocateBtnText}>Update</Text>
@@ -742,19 +840,21 @@ export default function CompleteProfileScreen() {
               {/* Hospital Search */}
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Preferred Hospital</Text>
-                <View style={styles.inputRow}>
+                <View style={[styles.inputRow, focusedField === 'hospital' && styles.inputRowFocused]}>
                   <TextInput
                     style={styles.fieldInput}
                     value={hospitalSearch}
                     onChangeText={setHospitalSearch}
                     placeholder={formData.city ? `Search hospital in ${formData.city}...` : 'Search hospital...'}
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#7b7485"
+                    onFocus={() => setFocusedField('hospital')}
+                    onBlur={() => setFocusedField(null)}
                   />
-                  {searchingHospitals && <ActivityIndicator size="small" color="#2563EB" style={{ marginRight: 8 }} />}
+                  {searchingHospitals && <ActivityIndicator size="small" color="#420093" style={{ marginRight: 8 }} />}
                 </View>
                 {!hospitalSearch && formData.city && (
                   <TouchableOpacity style={styles.nearbyBtn} onPress={fetchNearbyHospitals} activeOpacity={0.7}>
-                    <MapPin size={14} color="#2563EB" />
+                    <MapPin size={14} color="#420093" />
                     <Text style={styles.nearbyBtnText}>Show hospitals near {formData.city}</Text>
                   </TouchableOpacity>
                 )}
@@ -782,7 +882,7 @@ export default function CompleteProfileScreen() {
                     <Text style={styles.hospitalAddress}>{h.address}</Text>
                   </View>
                   {formData.preferredHospital === h.name && (
-                    <View style={styles.checkCircle}><Text style={styles.checkMark}>✓</Text></View>
+                    <View style={styles.modalCheckCircle}><Text style={styles.modalCheckMark}>✓</Text></View>
                   )}
                 </TouchableOpacity>
               ))}
@@ -793,45 +893,48 @@ export default function CompleteProfileScreen() {
                 <Text style={styles.fieldLabel}>Emergency Contacts</Text>
                 <TouchableOpacity onPress={addContact}>
                   <View style={styles.addContactBtn}>
-                    <Text style={styles.addContactBtnText}>+ Add</Text>
+                    <Plus size={14} color="#420093" />
+                    <Text style={styles.addContactBtnText}>Add</Text>
                   </View>
                 </TouchableOpacity>
               </View>
               {formData.emergencyContacts.map((contact, index) => (
                 <View key={index} style={styles.contactCard}>
-                  <View style={styles.contactIndex}>
-                    <Text style={styles.contactIndexText}>{index + 1}</Text>
+                  <View style={styles.contactCardHeader}>
+                    <View style={styles.contactIndex}>
+                      <Text style={styles.contactIndexText}>{index + 1}</Text>
+                    </View>
+                    {formData.emergencyContacts.length > 1 && (
+                      <TouchableOpacity onPress={() => removeContact(index)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Trash2 size={16} color="#ba1a1a" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <TextInput
                     style={styles.contactInput}
                     value={contact.name}
                     onChangeText={v => handleContactChange(index, 'name', v)}
                     placeholder="Full name"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#7b7485"
                   />
                   <TouchableOpacity
                     style={styles.contactPickerBtn}
                     onPress={() => setShowRelationshipPicker(index)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.contactPickerText, !contact.relationship && { color: '#94A3B8' }]}>
+                    <Text style={[styles.contactPickerText, !contact.relationship && { color: '#7b7485' }]}>
                       {contact.relationship || 'Relationship'}
                     </Text>
-                    <ChevronDown size={14} color="#94A3B8" />
+                    <ChevronDown size={14} color="#7b7485" />
                   </TouchableOpacity>
                   <TextInput
                     style={styles.contactInput}
                     value={contact.phone}
                     onChangeText={v => handleContactChange(index, 'phone', v)}
                     placeholder="Phone number"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#7b7485"
                     keyboardType="phone-pad"
                   />
-                  {formData.emergencyContacts.length > 1 && (
-                    <TouchableOpacity onPress={() => removeContact(index)} style={{ alignSelf: 'flex-end' }}>
-                      <Text style={styles.removeContact}>Remove</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               ))}
             </View>
@@ -842,53 +945,76 @@ export default function CompleteProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <StatusBar barStyle="dark-content" />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={{ flex: 1 }}
+      >
+        {/* Decorative Atmospheric Glows */}
+        <View style={styles.glowTopLeft} />
+        <View style={styles.glowBottomRight} />
+
+        {/* Custom Header Bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <View style={styles.logoBox}><Text style={styles.logoText}>S</Text></View>
-            <Text style={styles.brandName}>Complete Profile</Text>
+            <Text style={styles.brandName}>SHIFAA</Text>
           </View>
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepBadgeText}>{currentStep}/{TOTAL_STEPS}</Text>
+          <View style={styles.topBarRight}>
+            <TouchableOpacity style={styles.languageBtn}>
+              <Globe size={14} color="#420093" />
+              <Text style={styles.languageText}>AR/EN</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
+        {/* Step Indicator Progress */}
         <StepIndicator currentStep={currentStep} />
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Main Form content scrollview */}
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+        >
           {error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorIcon}>⚠️</Text>
+              <ShieldAlert size={18} color="#ba1a1a" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
           <Animated.View style={{ opacity: fadeAnim }}>
             {renderStepContent()}
           </Animated.View>
-          <View style={{ height: 80 }} />
+          <View style={{ height: 40 }} />
         </ScrollView>
 
+        {/* Navigation Action Footer */}
         <View style={styles.bottomBar}>
           {currentStep > 1 && (
             <TouchableOpacity style={styles.backBtn} onPress={prevStep} activeOpacity={0.7}>
-              <ChevronLeft size={20} color="#64748B" />
+              <ChevronLeft size={18} color="#4a4453" />
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
           )}
           <View style={{ flex: 1 }} />
           {currentStep < TOTAL_STEPS ? (
             <TouchableOpacity style={styles.primaryBtn} onPress={nextStep} activeOpacity={0.8}>
-              <Text style={styles.primaryBtnText}>Continue</Text>
-              <ChevronRight size={20} color="#FFFFFF" />
+              <Text style={styles.primaryBtnText}>Next Step</Text>
+              <ChevronRight size={18} color="#FFFFFF" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={[styles.submitBtn, submitting && { opacity: 0.6 }]} onPress={handleSubmit} disabled={submitting} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={[styles.submitBtn, submitting && { opacity: 0.6 }]} 
+              onPress={handleSubmit} 
+              disabled={submitting} 
+              activeOpacity={0.8}
+            >
               {submitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Save size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryBtnText}>Complete</Text>
+                  <Save size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryBtnText}>Complete Setup</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -911,7 +1037,7 @@ export default function CompleteProfileScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Country Code</Text>
               <TouchableOpacity onPress={() => setShowCountryCodePicker(false)}>
-                <X size={20} color="#94A3B8" />
+                <X size={20} color="#7b7485" />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -927,7 +1053,7 @@ export default function CompleteProfileScreen() {
                     {item.country} ({item.code})
                   </Text>
                   {formData.countryCode === item.code && (
-                    <View style={styles.checkCircle}><Text style={styles.checkMark}>✓</Text></View>
+                    <View style={styles.modalCheckCircle}><Text style={styles.modalCheckMark}>✓</Text></View>
                   )}
                 </TouchableOpacity>
               )}
@@ -951,115 +1077,782 @@ export default function CompleteProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#fbf8ff',
+    position: 'relative',
+  },
+  glowTopLeft: {
+    position: 'absolute',
+    top: -120,
+    left: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(66, 0, 147, 0.04)',
+    zIndex: 0,
+  },
+  glowBottomRight: {
+    position: 'absolute',
+    bottom: -120,
+    right: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(113, 42, 226, 0.04)',
+    zIndex: 0,
+  },
   topBar: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingHorizontal: 24, 
+    paddingVertical: 16, 
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1, 
+    borderBottomColor: 'rgba(204, 195, 214, 0.2)',
+    zIndex: 10,
   },
-  topBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoBox: { width: 30, height: 30, backgroundColor: '#2563EB', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  logoText: { color: '#FFFFFF', fontWeight: '900', fontSize: 16 },
-  brandName: { fontSize: 16, fontWeight: '900', color: '#0F172A' },
-  stepBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  stepBadgeText: { fontSize: 12, fontWeight: '800', color: '#2563EB' },
+  topBarLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 10 
+  },
+  brandName: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#420093',
+    fontFamily: Platform.OS === 'ios' ? 'Plus Jakarta Sans' : 'sans-serif-condensed',
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  languageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eeecf8',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(123, 116, 133, 0.12)',
+  },
+  languageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#420093',
+  },
   stepsContainer: {
-    flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    flexDirection: 'row', 
+    paddingHorizontal: 24, 
+    paddingVertical: 18,
+    backgroundColor: '#ffffff', 
+    borderBottomWidth: 1, 
+    borderBottomColor: 'rgba(204, 195, 214, 0.2)',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    position: 'relative',
+    zIndex: 10,
   },
-  stepWrapper: { alignItems: 'center', flex: 1, position: 'relative' },
-  stepCircle: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  stepCircleActive: { backgroundColor: '#2563EB' },
-  stepCircleText: { fontSize: 11, fontWeight: '800', color: '#94A3B8' },
-  stepCircleTextActive: { color: '#FFFFFF' },
-  stepLabel: { fontSize: 9, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 },
-  stepLabelActive: { color: '#2563EB' },
-  stepConnector: { position: 'absolute', top: 13, left: '60%', right: -10, height: 2, backgroundColor: '#E2E8F0' },
-  stepConnectorActive: { backgroundColor: '#2563EB' },
-  content: { flex: 1, padding: 20 },
-  stepIntro: { alignItems: 'center', marginBottom: 24 },
-  stepIconBox: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginBottom: 12, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
-  stepIntroTitle: { fontSize: 20, fontWeight: '900', color: '#0F172A', marginBottom: 4 },
-  stepIntroSub: { fontSize: 14, color: '#64748B', textAlign: 'center' },
-  sectionCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  fieldGroup: { marginBottom: 20 },
-  fieldLabel: { fontSize: 11, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14 },
-  fieldInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, color: '#0F172A', fontWeight: '500' },
-  pickerButton: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pickerText: { fontSize: 15, color: '#0F172A', fontWeight: '500' },
-  pickerPlaceholder: { color: '#94A3B8', fontWeight: '400' },
-  phoneRow: { flexDirection: 'row', gap: 8 },
-  codePicker: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  codePickerText: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
-  phoneInput: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: '#0F172A', fontWeight: '500' },
-  dobRow: { flexDirection: 'row', gap: 8 },
-  smallPicker: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
-  smallPickerText: { fontSize: 14, color: '#0F172A', fontWeight: '500' },
-  row: { flexDirection: 'row' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' },
-  chipActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  chipText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  chipTextActive: { color: '#FFFFFF' },
-  searchResult: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginTop: 6 },
-  searchResultText: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  searchResultSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  addLabel: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
-  medItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginTop: 6 },
-  medName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  medDosage: { fontSize: 12, color: '#64748B' },
-  removeText: { fontSize: 14, fontWeight: '700', color: '#EF4444' },
-  emptyHint: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 8 },
-  gpsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#2563EB', paddingVertical: 14, borderRadius: 14, marginTop: 4 },
-  gpsButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  locationCard: { backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, marginBottom: 16 },
-  locationCardActive: { borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
-  locationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  locationTitle: { fontSize: 14, fontWeight: '700', color: '#64748B' },
-  locationDetails: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 28 },
-  locationName: { fontSize: 14, color: '#2563EB', fontWeight: '600', flex: 1 },
-  locationHint: { fontSize: 13, color: '#94A3B8', paddingLeft: 28 },
-  relocateBtn: { backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  relocateBtnText: { fontSize: 12, fontWeight: '600', color: '#2563EB' },
-  nearbyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingVertical: 6 },
-  nearbyBtnText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
-  selectedHospital: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE', marginBottom: 8 },
-  selectedHospitalLabel: { fontSize: 10, fontWeight: '800', color: '#2563EB', textTransform: 'uppercase', letterSpacing: 1 },
-  selectedHospitalName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#0F172A' },
-  changeText: { fontSize: 13, fontWeight: '700', color: '#EF4444' },
-  hospitalResult: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 6, gap: 8 },
-  hospitalResultActive: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
-  hospitalName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
-  hospitalAddress: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  addContactBtn: { backgroundColor: '#EFF6FF', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10 },
-  addContactBtnText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
-  contactCard: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 16, marginBottom: 12, gap: 10 },
-  contactIndex: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
-  contactIndexText: { fontSize: 12, fontWeight: '800', color: '#64748B' },
-  contactInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#0F172A' },
-  contactPickerBtn: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  contactPickerText: { fontSize: 14, color: '#0F172A' },
-  removeContact: { fontSize: 13, fontWeight: '700', color: '#EF4444' },
-  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF2F2', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 16 },
-  errorIcon: { fontSize: 16 },
-  errorText: { color: '#B91C1C', fontSize: 14, fontWeight: '600', flex: 1 },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, backgroundColor: '#F1F5F9' },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: '#64748B' },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#2563EB', paddingVertical: 13, paddingHorizontal: 24, borderRadius: 14, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
-  primaryBtnText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
-  submitBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#22C55E', paddingVertical: 13, paddingHorizontal: 24, borderRadius: 14, shadowColor: '#22C55E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  progressLineBg: {
+    position: 'absolute',
+    top: 31,
+    left: 40,
+    right: 40,
+    height: 3,
+    backgroundColor: '#eeecf8',
+    borderRadius: 99,
+  },
+  progressLineActive: {
+    position: 'absolute',
+    top: 31,
+    left: 40,
+    height: 3,
+    backgroundColor: '#420093',
+    borderRadius: 99,
+  },
+  stepWrapper: { 
+    alignItems: 'center', 
+    width: 60,
+    position: 'relative',
+    zIndex: 15,
+  },
+  stepCircle: { 
+    width: 28, 
+    height: 28, 
+    borderRadius: 14, 
+    backgroundColor: '#eeecf8', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 6,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  stepCircleActive: { 
+    backgroundColor: '#420093',
+    borderColor: '#ffffff',
+    shadowColor: '#420093',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  stepCircleCompleted: {
+    backgroundColor: '#4edea3',
+  },
+  stepCircleText: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: '#7b7485' 
+  },
+  stepCircleTextActive: { 
+    color: '#ffffff' 
+  },
+  stepCircleCompletedText: {
+    color: '#005438',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  stepLabel: { 
+    fontSize: 10, 
+    fontWeight: '600', 
+    color: '#7b7485', 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.5 
+  },
+  stepLabelActive: { 
+    color: '#420093',
+    fontWeight: '700',
+  },
+  stepLabelCompleted: {
+    color: '#005438',
+  },
+  content: { 
+    flex: 1, 
+    padding: 20,
+    zIndex: 10,
+  },
+  stepIntro: { 
+    alignItems: 'center', 
+    marginBottom: 24,
+    paddingHorizontal: 12,
+  },
+  stepIconBox: { 
+    width: 52, 
+    height: 52, 
+    borderRadius: 16, 
+    backgroundColor: '#420093', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 12, 
+    shadowColor: '#420093', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 8, 
+    elevation: 4 
+  },
+  stepIntroTitle: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: '#420093', 
+    marginBottom: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Plus Jakarta Sans' : 'sans-serif-condensed',
+  },
+  stepIntroSub: { 
+    fontSize: 14, 
+    color: '#4a4453', 
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  sectionCard: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 24, 
+    padding: 20, 
+    marginBottom: 16, 
+    borderWidth: 1, 
+    borderColor: 'rgba(204, 195, 214, 0.2)', 
+    shadowColor: 'rgba(91, 33, 182, 0.04)', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.8, 
+    shadowRadius: 16, 
+    elevation: 2 
+  },
+  fieldGroup: { 
+    marginBottom: 20 
+  },
+  fieldLabel: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#4a4453', 
+    textTransform: 'uppercase', 
+    letterSpacing: 1, 
+    marginBottom: 8 
+  },
+  fieldLabelFocused: {
+    color: '#420093',
+  },
+  inputRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 16,
+    height: 54,
+  },
+  inputRowFocused: {
+    borderColor: '#420093',
+    borderWidth: 1.5,
+  },
+  fieldInput: { 
+    flex: 1, 
+    paddingHorizontal: 16, 
+    fontSize: 15, 
+    color: '#1a1b23', 
+    fontWeight: '500',
+    height: '100%',
+  },
+  pickerButton: { 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 16, 
+    paddingHorizontal: 16, 
+    height: 54,
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
+  pickerButtonFocused: {
+    borderColor: '#420093',
+    borderWidth: 1.5,
+  },
+  pickerText: { 
+    fontSize: 15, 
+    color: '#1a1b23', 
+    fontWeight: '500' 
+  },
+  pickerPlaceholder: { 
+    color: '#7b7485', 
+    fontWeight: '400' 
+  },
+  pregnancyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingVertical: 4,
+  },
+  pregnancyLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4a4453',
+  },
+  phoneRow: { 
+    flexDirection: 'row', 
+    gap: 8,
+    borderWidth: 0,
+  },
+  codePicker: { 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 16, 
+    paddingHorizontal: 12, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4,
+    height: 54,
+  },
+  codePickerText: { 
+    fontSize: 15, 
+    fontWeight: '600', 
+    color: '#1a1b23' 
+  },
+  phoneInput: { 
+    flex: 1, 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 16, 
+    paddingHorizontal: 16, 
+    height: 54,
+    fontSize: 15, 
+    color: '#1a1b23', 
+    fontWeight: '500' 
+  },
+  dobRow: { 
+    flexDirection: 'row', 
+    gap: 8 
+  },
+  smallPicker: { 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 16, 
+    paddingHorizontal: 10, 
+    height: 54,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    gap: 4 
+  },
+  smallPickerText: { 
+    fontSize: 14, 
+    color: '#1a1b23', 
+    fontWeight: '500' 
+  },
+  row: { 
+    flexDirection: 'row' 
+  },
+  chipRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 8 
+  },
+  chip: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 999, 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    backgroundColor: '#ffffff' 
+  },
+  chipActive: { 
+    backgroundColor: '#420093', 
+    borderColor: '#420093' 
+  },
+  chipText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#4a4453' 
+  },
+  chipTextActive: { 
+    color: '#ffffff' 
+  },
+  searchResult: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    backgroundColor: '#ffffff', 
+    padding: 12, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: 'rgba(204, 195, 214, 0.4)', 
+    marginTop: 6 
+  },
+  searchResultText: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#1a1b23' 
+  },
+  searchResultSub: { 
+    fontSize: 12, 
+    color: '#4a4453', 
+    marginTop: 2 
+  },
+  addLabel: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#420093' 
+  },
+  medItem: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    backgroundColor: '#eeecf8', 
+    padding: 12, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: 'rgba(204, 195, 214, 0.2)', 
+    marginTop: 6 
+  },
+  medName: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#1a1b23' 
+  },
+  medDosage: { 
+    fontSize: 12, 
+    color: '#4a4453' 
+  },
+  removeText: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#ba1a1a' 
+  },
+  emptyHint: { 
+    fontSize: 13, 
+    color: '#7b7485', 
+    fontStyle: 'italic', 
+    marginTop: 8 
+  },
+  encryptionCard: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'rgba(78, 222, 163, 0.1)',
+    borderWidth: 1,
+    borderColor: '#4edea3',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  encryptionText: {
+    flex: 1,
+    color: '#005438',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  gpsButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 8, 
+    backgroundColor: '#420093', 
+    height: 54, 
+    borderRadius: 16, 
+    marginTop: 4,
+    shadowColor: '#420093',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  gpsButtonText: { 
+    color: '#FFFFFF', 
+    fontSize: 14, 
+    fontWeight: '700' 
+  },
+  locationCard: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    padding: 16, 
+    marginBottom: 16 
+  },
+  locationCardActive: { 
+    borderColor: '#420093', 
+    backgroundColor: 'rgba(66, 0, 147, 0.02)' 
+  },
+  locationHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 8 
+  },
+  locationTitle: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#4a4453' 
+  },
+  locationDetails: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    paddingLeft: 28 
+  },
+  locationName: { 
+    fontSize: 14, 
+    color: '#420093', 
+    fontWeight: '600', 
+    flex: 1 
+  },
+  locationHint: { 
+    fontSize: 13, 
+    color: '#7b7485', 
+    paddingLeft: 28 
+  },
+  relocateBtn: { 
+    backgroundColor: '#ffffff', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 10, 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6' 
+  },
+  relocateBtnText: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: '#420093' 
+  },
+  nearbyBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    marginTop: 8, 
+    paddingVertical: 6 
+  },
+  nearbyBtnText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#420093' 
+  },
+  selectedHospital: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: 'rgba(66, 0, 147, 0.05)', 
+    padding: 12, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: 'rgba(66, 0, 147, 0.15)', 
+    marginBottom: 8 
+  },
+  selectedHospitalLabel: { 
+    fontSize: 10, 
+    fontWeight: '800', 
+    color: '#420093', 
+    textTransform: 'uppercase', 
+    letterSpacing: 1 
+  },
+  selectedHospitalName: { 
+    flex: 1, 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#1a1b23' 
+  },
+  changeText: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#ba1a1a' 
+  },
+  hospitalResult: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#ffffff', 
+    padding: 14, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    marginBottom: 6, 
+    gap: 8 
+  },
+  hospitalResultActive: { 
+    borderColor: '#420093', 
+    backgroundColor: 'rgba(66, 0, 147, 0.02)' 
+  },
+  hospitalName: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#1a1b23' 
+  },
+  hospitalAddress: { 
+    fontSize: 12, 
+    color: '#7b7485', 
+    marginTop: 2 
+  },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 16 
+  },
+  addContactBtn: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(66, 0, 147, 0.05)', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 10 
+  },
+  addContactBtnText: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: '#420093' 
+  },
+  contactCard: { 
+    backgroundColor: '#eeecf8', 
+    borderWidth: 1, 
+    borderColor: 'rgba(204, 195, 214, 0.2)', 
+    borderRadius: 20, 
+    padding: 16, 
+    marginBottom: 12, 
+    gap: 10 
+  },
+  contactCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  contactIndex: { 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    backgroundColor: '#ffffff', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc3d6',
+  },
+  contactIndexText: { 
+    fontSize: 12, 
+    fontWeight: '800', 
+    color: '#420093' 
+  },
+  contactInput: { 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 12, 
+    paddingHorizontal: 14, 
+    height: 48, 
+    fontSize: 14, 
+    color: '#1a1b23' 
+  },
+  contactPickerBtn: { 
+    backgroundColor: '#ffffff', 
+    borderWidth: 1, 
+    borderColor: '#ccc3d6', 
+    borderRadius: 12, 
+    paddingHorizontal: 14, 
+    height: 48, 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
+  contactPickerText: { 
+    fontSize: 14, 
+    color: '#1a1b23' 
+  },
+  errorBox: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: '#ffdad6', 
+    padding: 14, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: '#ba1a1a', 
+    marginBottom: 16 
+  },
+  errorText: { 
+    color: '#ba1a1a', 
+    fontSize: 14, 
+    fontWeight: '600', 
+    flex: 1 
+  },
+  bottomBar: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 20, 
+    backgroundColor: '#ffffff', 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(204, 195, 214, 0.2)',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    zIndex: 10,
+  },
+  backBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    paddingVertical: 12, 
+    paddingHorizontal: 18, 
+    borderRadius: 16, 
+    backgroundColor: '#eeecf8' 
+  },
+  backBtnText: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#4a4453' 
+  },
+  primaryBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    backgroundColor: '#420093', 
+    paddingVertical: 13, 
+    paddingHorizontal: 24, 
+    borderRadius: 16, 
+    shadowColor: '#420093', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 8, 
+    elevation: 4 
+  },
+  primaryBtnText: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#ffffff' 
+  },
+  submitBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: '#005438', 
+    paddingVertical: 13, 
+    paddingHorizontal: 24, 
+    borderRadius: 16, 
+    shadowColor: '#005438', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 8, 
+    elevation: 4 
+  },
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '60%', paddingBottom: 34 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
-  modalOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
-  modalOptionActive: { backgroundColor: '#EFF6FF' },
-  modalOptionText: { fontSize: 16, color: '#0F172A', fontWeight: '500' },
-  modalOptionTextActive: { color: '#2563EB', fontWeight: '700' },
-  checkCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
-  checkMark: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'flex-end' 
+  },
+  modalContent: { 
+    backgroundColor: '#ffffff', 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    maxHeight: '60%', 
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 24, 
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#eeecf8' 
+  },
+  modalTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#420093' 
+  },
+  modalOption: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 24, 
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#fbf8ff' 
+  },
+  modalOptionActive: { 
+    backgroundColor: 'rgba(66, 0, 147, 0.05)' 
+  },
+  modalOptionText: { 
+    fontSize: 16, 
+    color: '#1a1b23', 
+    fontWeight: '500' 
+  },
+  modalOptionTextActive: { 
+    color: '#420093', 
+    fontWeight: '700' 
+  },
+  modalCheckCircle: { 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    backgroundColor: '#420093', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  modalCheckMark: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    fontWeight: '700' 
+  },
 });
